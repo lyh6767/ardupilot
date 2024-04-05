@@ -643,6 +643,11 @@ void Copter::one_hz_loop()
 #endif
 
     AP_Notify::flags.flying = !ap.land_complete;
+
+    gcs().send_text(MAV_SEVERITY_CRITICAL, 
+                "Current Alt: %.2f m",
+                 copter.flightmode->get_alt_above_ground_cm() / 100.00f);
+                 
 }
 
 void Copter::init_simple_bearing()

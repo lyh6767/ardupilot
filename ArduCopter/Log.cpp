@@ -5,6 +5,26 @@
 // Code to Write and Read packets from AP_Logger log memory
 // Code to interact with the user to dump or erase logs
 
+
+struct PACKED log_M2DOCK {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t ax;
+    uint8_t ay;
+};
+
+// Write an OpenMV packet
+void Copter::Log_Write_M2DOCK()
+{
+    struct log_M2DOCK pkt = {
+        LOG_PACKET_HEADER_INIT(LOG_M2DOCK_MSG),
+        time_us         : AP_HAL::micros64(),
+        ax              : m2dock.ax,
+        ay              : m2dock.ay
+    };
+    logger.WriteCriticalBlock(&pkt, sizeof(pkt));
+}
+
 struct PACKED log_Control_Tuning {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -468,7 +488,8 @@ const struct LogStructure Copter::log_structure[] = {
 // @Field: TimeUS: Time since system startup
 // @Field: Id: Data type identifier
 // @Field: Value: Value
-
+    { LOG_M2DOCK_MSG, sizeof(log_M2DOCK),
+      "DOCK",   "QBB",   "TimeUS,ax,ay", "s--", "F--" },
     { LOG_CONTROL_TUNING_MSG, sizeof(log_Control_Tuning),
       "CTUN", "Qffffffefffhh", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CRt", "s----mmmmmmnn", "F----00B000BB" , true },
     { LOG_DATA_INT16_MSG, sizeof(log_Data_Int16t),         

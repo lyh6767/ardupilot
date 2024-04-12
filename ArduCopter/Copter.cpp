@@ -191,6 +191,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #endif
     SCHED_TASK_CLASS(AP_Notify,            &copter.notify,              update,          50,  90,  78),
     SCHED_TASK(one_hz_loop,            1,    100,  81),
+    SCHED_TASK(update_M2DOCK,        400,    100,  82), //任务的执行间隔==400Hz;_prio==82 是任务的优先级。数字越大，优先级越高;最大运行时间不超过100us
     SCHED_TASK(ekf_check,             10,     75,  84),
     SCHED_TASK(check_vibration,       10,     50,  87),
     SCHED_TASK(gpsglitch_check,       10,     50,  90),
@@ -643,6 +644,88 @@ void Copter::one_hz_loop()
 #endif
 
     AP_Notify::flags.flying = !ap.land_complete;
+
+    gcs().send_text(MAV_SEVERITY_CRITICAL,"M2DOCK X:%d Y:%d", m2dock.ax,m2dock.ay);
+                    
+                   
+                    
+
+}
+
+void Copter::update_M2DOCK(void)
+{
+    // simulation
+    bool sim_m2dock_new_data = false;
+    static uint32_t last_sim_new_data_time_ms = 0;
+    if(copter.flightmode->mode_number() != Mode::Number::GUIDED) {
+        last_sim_new_data_time_ms = millis();
+        m2dock.ax = 120;
+        m2dock.ay = 120;
+    } else if (millis()- last_sim_new_data_time_ms < 20000) {
+        sim_m2dock_new_data = true;
+        m2dock.last_frame_ms = millis();
+        m2dock.ax = 0;
+        m2dock.ay = 0;
+    } else if (millis()- last_sim_new_data_time_ms < 40000) {
+        sim_m2dock_new_data = true;
+        m2dock.last_frame_ms = millis();
+        m2dock.ax = 0;
+        m2dock.ay = 240;
+    } else if (millis()- last_sim_new_data_time_ms < 60000) {
+        sim_m2dock_new_data = true;
+        m2dock.last_frame_ms = millis();
+        m2dock.ax = 240;
+        m2dock.ay = 240;
+    } else if (millis()- last_sim_new_data_time_ms < 80000) {
+        sim_m2dock_new_data = true;
+        m2dock.last_frame_ms = millis();
+        m2dock.ax = 240;
+        m2dock.ay = 0;
+    } else {
+        sim_m2dock_new_data = false;
+        m2dock.last_frame_ms = millis();
+        m2dock.ax = 120;
+        m2dock.ay = 120;
+    }
+
+    // end of simulation code
+
+    static uint32_t last_set_pos_target_time_ms = 0;
+    Vector3f target = Vector3f(0, 0, 0);
+    if(m2dock.update() || sim_m2dock_new_data) {
+        Log_Write_M2DOCK();
+
+        if(copter.flightmode->mode_number() != Mode::Number::GUIDED)
+            return;
+
+        int16_t target_body_frame_x = (int16_t)m2dock.ax - 120;  //  240 * 240
+        int16_t target_body_frame_y = (int16_t)m2dock.ay - 120;
+
+        float angle_x_deg = -target_body_frame_y * 60.0f / 240.0f;
+        float angle_y_deg = target_body_frame_x * 60.0f / 240.0f;
+
+       Vector3f v = Vector3f(tanf(radians(angle_x_deg)), tanf(radians(angle_y_deg)),1.0f);
+
+        v = v / v.length();
+
+        const Matrix3f &rotMat = copter.ahrs.get_rotation_body_to_ned();
+        v = rotMat * v;
+
+        target = v * 5000.0f;  // distance 50m
+
+        target.z = -target.z;  // ned to neu
+
+        Vector3f current_pos = inertial_nav.get_position_neu_cm();
+        target = target + current_pos;
+
+        if(millis() - last_set_pos_target_time_ms > 500) {  // call in 2Hz
+            // wp_nav->set_wp_destination(target, false);
+            mode_guided.set_destination(target, false, 0, true, 0, false);
+            last_set_pos_target_time_ms= millis();
+        }
+
+
+    }
 }
 
 void Copter::init_simple_bearing()
